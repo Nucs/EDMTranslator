@@ -6,8 +6,12 @@ using YamlDotNet.Serialization.NamingConventions;
 
 namespace EDMTranslatorTest
 {
+    /// <summary>
+    /// Integration tests of <see cref="JESCJaEnTranslator"/> on the real model (paths from <see cref="TestConfigFile"/>):
+    /// the tokenizer round trip, sample translations, and token-for-token parity with transformers.
+    /// </summary>
     [Collection("Sequential")]
-    public class JESCJaEnTranslatorTest
+    public class JESCJaEnTranslatorTest : IDisposable
     {
         private BertJa2GPTTokenizer? tokenizer;
         private JESCJaEnTranslator? translator;
@@ -24,7 +28,7 @@ namespace EDMTranslatorTest
                 .WithNamingConvention(UnderscoredNamingConvention.Instance)
                 .Build();
             // read test_config.yaml
-            using (var reader = new StreamReader("test_config.yaml"))
+            using (var reader = new StreamReader(TestConfigFile.Path))
             {
                 var yaml = deserializer.Deserialize<Dictionary<string, JESCJaEnTranslatorConfig>>(reader);
                 var config = yaml["jesc_ja_en_translator"];
@@ -42,6 +46,51 @@ namespace EDMTranslatorTest
 
             translator ??= InitTranslator();
             TestTranslator(translator);
+        }
+
+        /// <summary>
+        /// Every sentence of <c>reference_translations.json</c> generates exactly the tokens transformers' own greedy
+        /// <c>generate()</c> generates on the model's PyTorch weights.
+        /// </summary>
+        /// <returns>The test's task.</returns>
+        [Fact]
+        public async Task TranslationsMatchTransformersReferenceAsync()
+        {
+            var recorder = await ReferenceParity.CreateTokenizerAsync(encoderDictDir, "openai-community/gpt2");
+            using var parityTranslator = new JESCJaEnTranslator(recorder, modelDir);
+            ReferenceParity.AssertMatchesReference("jesc", recorder, parityTranslator, output);
+        }
+
+        /// <summary>
+        /// The <c>SessionOptions</c> overload changes how ONNX Runtime runs, not what it computes: with 2 intra-op threads the
+        /// translations still equal transformers' token for token, and the caller's options may be disposed right away.
+        /// </summary>
+        /// <returns>The test's task.</returns>
+        [Fact]
+        public async Task SessionOptionsOverloadMatchesTransformersReferenceAsync()
+        {
+            var recorder = await ReferenceParity.CreateTokenizerAsync(encoderDictDir, "openai-community/gpt2");
+            JESCJaEnTranslator tuned;
+            using (var options = new Microsoft.ML.OnnxRuntime.SessionOptions { IntraOpNumThreads = 2 })
+                tuned = new JESCJaEnTranslator(recorder, modelDir, options);
+            using (tuned)
+                ReferenceParity.AssertMatchesReference("jesc", recorder, tuned, output);
+        }
+
+        /// <summary>
+        /// A disposed translator refuses to translate with <see cref="ObjectDisposedException"/> instead of calling into a
+        /// released native session, and a second <c>Dispose</c> does nothing.
+        /// </summary>
+        /// <returns>The test's task.</returns>
+        [Fact]
+        public async Task TranslateAfterDisposeThrowsObjectDisposedAsync()
+        {
+            tokenizer ??= await InitTokenizerAsync();
+            var disposed = new JESCJaEnTranslator(tokenizer, modelDir);
+            Assert.False(string.IsNullOrEmpty(disposed.Translate("逃げろ!")));
+            disposed.Dispose();
+            disposed.Dispose();
+            Assert.Throws<ObjectDisposedException>(() => disposed.Translate("逃げろ!"));
         }
 
         private async Task<BertJa2GPTTokenizer> InitTokenizerAsync()
@@ -93,6 +142,17 @@ namespace EDMTranslatorTest
             output.WriteLine($"SourceText: {sentence}");
             string translated = translator.Translate(sentence);
             output.WriteLine($"Translated: {translated}");
+        }
+
+        /// <summary>
+        /// Releases the translator's sessions after each test, as the other translator tests do: the GC does not see their
+        /// native memory (about 1.5 GB), so it would not hurry to.
+        /// </summary>
+        public void Dispose()
+        {
+            translator?.Dispose();
+            tokenizer = null;
+            translator = null;
         }
     }
 }

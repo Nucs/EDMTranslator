@@ -6,6 +6,10 @@ using YamlDotNet.Serialization.NamingConventions;
 
 namespace EDMTranslatorTest
 {
+    /// <summary>
+    /// Integration tests of <see cref="AIhubJaKoTranslator"/> on the real model (paths from <see cref="TestConfigFile"/>):
+    /// the tokenizer round trip, sample translations, and token-for-token parity with transformers.
+    /// </summary>
     [Collection("Sequential")]
     public class AihubJaKoTranslatorTest : IDisposable
     {
@@ -24,7 +28,7 @@ namespace EDMTranslatorTest
                 .WithNamingConvention(UnderscoredNamingConvention.Instance)
                 .Build();
             // read test_config.yaml
-            using (var reader = new StreamReader("test_config.yaml"))
+            using (var reader = new StreamReader(TestConfigFile.Path))
             {
                 var yaml = deserializer.Deserialize<Dictionary<string, AihubJaKoTranslatorConfig>>(reader);
                 var config = yaml["aihub_ja_ko_translator"];
@@ -42,6 +46,19 @@ namespace EDMTranslatorTest
 
             translator ??= InitTranslator();
             TestTranslator(translator);
+        }
+
+        /// <summary>
+        /// Every sentence of <c>reference_translations.json</c> generates exactly the tokens transformers' own greedy
+        /// <c>generate()</c> generates on the model's PyTorch weights.
+        /// </summary>
+        /// <returns>The test's task.</returns>
+        [Fact]
+        public async Task TranslationsMatchTransformersReferenceAsync()
+        {
+            var recorder = await ReferenceParity.CreateTokenizerAsync(encoderDictDir, "skt/kogpt2-base-v2");
+            using var parityTranslator = new AIhubJaKoTranslator(recorder, modelDir);
+            ReferenceParity.AssertMatchesReference("aihub", recorder, parityTranslator, output);
         }
 
         private async Task<BertJa2GPTTokenizer> InitTokenizerAsync()
@@ -96,8 +113,13 @@ namespace EDMTranslatorTest
             output.WriteLine($"Translated: {translated}");
         }
 
+        /// <summary>
+        /// Releases the translator's sessions after each test: the GC does not see their native memory (about 1.3 GB), so it
+        /// would not hurry to.
+        /// </summary>
         public void Dispose()
         {
+            translator?.Dispose();
             tokenizer = null;
             translator = null;
         }

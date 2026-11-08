@@ -17,6 +17,10 @@
     <Content Include="test_config.yaml">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
+    <!-- transformers' greedy translations, the parity tests' reference (tools/reference/generate_reference.py). -->
+    <Content Include="reference_translations.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
   </ItemGroup>
 
   <ItemGroup>

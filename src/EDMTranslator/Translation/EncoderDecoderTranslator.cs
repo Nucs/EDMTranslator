@@ -21,7 +21,8 @@ namespace EDMTranslator.Models
 
         protected static Tensor<float> InitKeyValues(int inputIdLength)
         {
-            return np.zeros<float>(1, 12, inputIdLength, 64).ToMuliDimArray<float>().ToTensor<float>();
+            // NumSharp 0.80 keeps NumPy's one signature, np.zeros(shape, dtype); the generic params-int[] overload is gone.
+            return np.zeros(new Shape(1, 12, inputIdLength, 64), np.float32).ToMuliDimArray<float>().ToTensor<float>();
         }
 
         protected string GreedySearch(List<NamedOnnxValue> decoderInput, InferenceSession decoderSession,

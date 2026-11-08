@@ -22,7 +22,7 @@ Text translator library based on LLM models, especially EncoderDecoderModel in H
 
 # Requirements
 
-* .NET 6 or above
+* .NET 8 or above
 * **Free RAM spaces at least 3.5GB** before running the translator
 
 # Supported models
@@ -39,7 +39,7 @@ Following guide **supposes that you are to use JESCJaEnTranslator** mentioned ab
 ## Install the packages
 
 1. From the NuGet, install `EDMTranslator` package
-2. And then, install `Tokenizers.DotNet.runtime.win` package too
+2. And then, install `Tokenizers.DotNet.runtime.win-x64` package too (the same version as `Tokenizers.DotNet`, 1.2.1)
 
 ## Prepare the required data
 
@@ -115,7 +115,7 @@ static void Translate(JESCJaEnTranslator translator, string sentence)
 # How to build
 
 1. Prepare following stuff:
-   1. .NET build system (`dotnet 6.0, 7.0, 8.0`)
+   1. .NET build system (`dotnet 8.0, 10.0`)
    2. PowerShell (Recommend `7.4.2` or above)
 2. Run `cbuild.ps1`
 

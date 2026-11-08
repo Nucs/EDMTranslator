@@ -1,7 +1,8 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFrameworks>net6.0;net7.0;net8.0</TargetFrameworks>
+    <!-- NumSharp 0.80 targets net8.0 and net10.0 only (net6.0 and net7.0 went out of support in 2024). -->
+    <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
@@ -27,7 +28,9 @@
   <ItemGroup>
     <PackageReference Include="BertJapaneseTokenizer" Version="1.0.9" />
     <PackageReference Include="Microsoft.ML.OnnxRuntime" Version="1.22.1" />
-    <PackageReference Include="NumSharp" Version="0.30.0" />
+    <PackageReference Include="NumSharp" Version="0.80.0" />
+    <!-- Feeds NDArrays to ONNX Runtime and reads its outputs back as NDArrays over the same memory (no DenseTensor copies). -->
+    <PackageReference Include="NumSharp.Interop.OnnxRuntime" Version="0.80.0" />
     <PackageReference Include="RelaxVersioner" Version="3.18.0">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>

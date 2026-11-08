@@ -130,6 +130,16 @@ namespace EDMTranslator.Models
             return (results, newPastKeyValues);
         }
 
+        /// <summary>
+        /// One decoder step on the cache branch (<c>use_cache_branch = true</c>): feeds the previous step's cache, runs the
+        /// decoder, and returns its results with the cache the next step feeds.
+        /// </summary>
+        /// <param name="session">The decoder session (<c>decoder_model_merged.onnx</c>).</param>
+        /// <param name="input_data">The decoder inputs; their <c>use_cache_branch</c> and <c>past_key_values.*</c> entries are replaced in place.</param>
+        /// <param name="packedPastKeyValues">The previous step's cache, as this method or the first-step overload returned it.</param>
+        /// <returns>The run's results (logits first; the caller owns and disposes them) and the cache for the next step.</returns>
+        /// <exception cref="NotSupportedException">The decoder has no <c>past_key_values.0.*</c> input (see <see cref="PastValuesPerLayer"/>).</exception>
+        /// <exception cref="OnnxRuntimeException">ONNX Runtime rejected the inputs or failed to run the model.</exception>
         protected (IDisposableReadOnlyCollection<DisposableNamedOnnxValue>, IEnumerable<IEnumerable<DisposableNamedOnnxValue>>) ForwardOnnx(
     InferenceSession session, List<NamedOnnxValue> input_data, IEnumerable<IEnumerable<DisposableNamedOnnxValue>> packedPastKeyValues)
         {
@@ -170,14 +180,37 @@ namespace EDMTranslator.Models
             var outPastKeyValues = results.Skip(1).ToList();
             IEnumerable<IEnumerable<DisposableNamedOnnxValue>> newPastKeyValues;
 
-            // Combine the first two units of out_past_key_values with the last two units of past_key_values
-            var unpackedNewPastKeyValues = CombineTuples(outPastKeyValues, past_key_values, 4);
+            // Combine the first two units of out_past_key_values with the last two units of past_key_values.
+            // The unit is one decoder layer's cache entries, and how many a layer has depends on the export: Optimum's
+            // seq2seq decoders (T5, BART) have four - the self-attention key/value the step extends, then the cross-attention
+            // key/value that never change and are carried over from the input - while the GPT-2 decoders of these models have
+            // two, both self-attention, so every entry must come from this step's outputs. A fixed unit of four took layers
+            // 1, 3, 5, 7, 9 and 11 from the input every step, so they kept the first step's cache and never saw a generated token.
+            var unpackedNewPastKeyValues = CombineTuples(outPastKeyValues, past_key_values, PastValuesPerLayer(session));
             // Pack them to 4 units
             newPastKeyValues = unpackedNewPastKeyValues.Select((_, index) => unpackedNewPastKeyValues.Skip(index * 4).Take(4));
             // Make a list using the 0~5th units of newPastKeyValues
             newPastKeyValues = newPastKeyValues.Take(6);
 
             return (results, newPastKeyValues);
+        }
+
+        /// <summary>
+        /// The number of cache tensors one decoder layer takes, read from the session's input names: the inputs of layer 0
+        /// (<c>past_key_values.0.*</c>). Two for a GPT-2 decoder (self-attention key and value), four for an Optimum seq2seq
+        /// decoder that also caches cross-attention (<c>past_key_values.0.decoder.key</c> ... <c>past_key_values.0.encoder.value</c>).
+        /// </summary>
+        /// <param name="decoderSession">The decoder session (<c>decoder_model_merged.onnx</c>).</param>
+        /// <returns>The per-layer count, the unit <see cref="CombineTuples"/> groups by.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="decoderSession"/> is null.</exception>
+        /// <exception cref="NotSupportedException">The model has no <c>past_key_values.0.*</c> input, so it is not a decoder with a key/value cache.</exception>
+        protected static int PastValuesPerLayer(InferenceSession decoderSession)
+        {
+            ArgumentNullException.ThrowIfNull(decoderSession);
+            int count = decoderSession.InputMetadata.Keys.Count(name => name.StartsWith("past_key_values.0.", StringComparison.Ordinal));
+            if (count == 0)
+                throw new NotSupportedException("The decoder model has no 'past_key_values.0.*' input; a decoder with a key/value cache is expected.");
+            return count;
         }
 
         protected static List<DisposableNamedOnnxValue> CombineTuples(List<DisposableNamedOnnxValue> outPastKeyValues, List<DisposableNamedOnnxValue> pastKeyValues, int numPkvs)

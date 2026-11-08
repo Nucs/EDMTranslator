@@ -13,30 +13,48 @@ namespace EDMTranslator.Translation
     /// </summary>
     public class FF14JaKoTranslator : EncoderDecoderTranslator
     {
-        /// <summary>The encoder (<c>encoder_model.onnx</c>); an <see cref="NDInferenceSession"/>, whose release waits for runs in flight.</summary>
+        /// <summary>The encoder (<c>encoder_model.onnx</c>); an <see cref="NDInferenceSession"/>, whose release is deferred until a run in flight returns.</summary>
         private readonly NDInferenceSession encoderSession;
 
         /// <summary>The merged decoder (<c>decoder_model_merged.onnx</c>).</summary>
         private readonly NDInferenceSession decoderSession;
 
-        /// <summary>Opens the model's two ONNX files; loading takes a few seconds and about 1.5 GB of memory.</summary>
+        /// <summary>Opens the model's two ONNX files with ONNX Runtime's default options; loading takes a few seconds and about 1.5 GB of memory.</summary>
         /// <param name="tokenizer">The tokenizer: bert-base-japanese-v2 for the source, the KoGPT2 <c>tokenizer.json</c> for the output.</param>
         /// <param name="modelDirPath">The folder holding <c>encoder_model.onnx</c> and <c>decoder_model_merged.onnx</c>.</param>
         /// <exception cref="OnnxRuntimeException">A model file is missing or is not a valid ONNX model.</exception>
-        public FF14JaKoTranslator(BertJa2GPTTokenizer tokenizer, string modelDirPath) : base(
+        public FF14JaKoTranslator(BertJa2GPTTokenizer tokenizer, string modelDirPath)
+            : this(tokenizer, modelDirPath, sessionOptions: null)
+        {
+        }
+
+        /// <summary>Opens the model's two ONNX files with the given ONNX Runtime options.</summary>
+        /// <remarks>
+        /// The options are how to tune ONNX Runtime, which spends nearly all of a translation's time. The one that matters most
+        /// on a desktop CPU is <see cref="SessionOptions.IntraOpNumThreads"/>: the default uses every physical core, and on a
+        /// hybrid CPU (performance + efficiency cores) a decoder step then waits for its slowest thread - on an i9-13900K
+        /// under load, the median step took 30-81 ms with the default against ~20 ms with 8 or 16 threads.
+        /// </remarks>
+        /// <param name="tokenizer">The tokenizer: bert-base-japanese-v2 for the source, the KoGPT2 <c>tokenizer.json</c> for the output.</param>
+        /// <param name="modelDirPath">The folder holding <c>encoder_model.onnx</c> and <c>decoder_model_merged.onnx</c>.</param>
+        /// <param name="sessionOptions">Options for both sessions, or <c>null</c> for ONNX Runtime's defaults with error-level
+        /// logging (what the two-argument constructor uses). They stay the caller's: the sessions copy them, so they may be
+        /// disposed as soon as this returns.</param>
+        /// <exception cref="OnnxRuntimeException">A model file is missing or is not a valid ONNX model, or the options are invalid.</exception>
+        public FF14JaKoTranslator(BertJa2GPTTokenizer tokenizer, string modelDirPath, SessionOptions? sessionOptions) : base(
             modelName: "ffxiv-ja-ko-translator",
             modelHubName: "sappho192/ffxiv-ja-ko-translator",
             tokenizer: tokenizer)
         {
             string encoderModelPath = Path.Combine(modelDirPath, "encoder_model.onnx");
             string decoderModelPath = Path.Combine(modelDirPath, "decoder_model_merged.onnx");
-            // The sessions copy their options when they are created, so the options' native handle can go right after.
-            using var sessionOptions = new SessionOptions
-            {
-                LogSeverityLevel = OrtLoggingLevel.ORT_LOGGING_LEVEL_ERROR
-            };
-            encoderSession = new(encoderModelPath, sessionOptions);
-            decoderSession = new(decoderModelPath, sessionOptions);
+            // The sessions copy their options when they are created, so the default options' native handle can go right
+            // after (using on null does nothing: caller-supplied options are the caller's to dispose).
+            using var defaultOptions = sessionOptions is null
+                ? new SessionOptions { LogSeverityLevel = OrtLoggingLevel.ORT_LOGGING_LEVEL_ERROR }
+                : null;
+            encoderSession = new(encoderModelPath, sessionOptions ?? defaultOptions!);
+            decoderSession = new(decoderModelPath, sessionOptions ?? defaultOptions!);
         }
 
         /// <summary>Translates one Japanese sentence into Korean.</summary>

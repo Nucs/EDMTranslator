@@ -8,6 +8,7 @@
     - [Japanese dictionary](#japanese-dictionary)
     - [Fine-tuned translator model](#fine-tuned-translator-model)
   - [Implement the driver code](#implement-the-driver-code)
+  - [Tune ONNX Runtime (optional)](#tune-onnx-runtime-optional)
 - [How to build](#how-to-build)
 
 # EDMTranslator
@@ -112,6 +113,17 @@ static void Translate(JESCJaEnTranslator translator, string sentence)
     Console.WriteLine($"Translated: {translated}");
 }
 ```
+
+## Tune ONNX Runtime (optional)
+
+Nearly all of a translation's time is spent in ONNX Runtime. Every translator also accepts ONNX Runtime's `SessionOptions`, for example to choose the number of threads:
+
+```csharp
+using var options = new Microsoft.ML.OnnxRuntime.SessionOptions { IntraOpNumThreads = 8 };
+using var translator = new JESCJaEnTranslator(tokenizer, modelDir, options);
+```
+
+By default ONNX Runtime uses every physical core. On CPUs that mix performance and efficiency cores (Intel 12th generation and later), each decoder step then waits for its slowest thread, so a thread count around the number of performance cores is often much faster: on an i9-13900K (8 performance cores) the JESC model went from 40-42 to 24.5 ms per generated token with `IntraOpNumThreads = 8` (16 threads: 28.5-29.4 ms).
 
 # How to build
 

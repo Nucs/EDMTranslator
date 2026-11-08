@@ -125,6 +125,18 @@ using var translator = new JESCJaEnTranslator(tokenizer, modelDir, options);
 
 By default ONNX Runtime uses every physical core. On CPUs that mix performance and efficiency cores (Intel 12th generation and later), each decoder step then waits for its slowest thread, so a thread count around the number of performance cores is often much faster: on an i9-13900K (8 performance cores) the JESC model went from 40-42 to 24.5 ms per generated token with `IntraOpNumThreads = 8` (16 threads: 28.5-29.4 ms).
 
+### Use the int8 models (FF14 and Aihub)
+
+The [FF14](https://huggingface.co/sappho192/ffxiv-ja-ko-translator/tree/main/onnxq) and [Aihub](https://huggingface.co/sappho192/aihub-ja-ko-translator/tree/main/onnxq) model repositories also publish an 8-bit version of both models in their `onnxq` folder (dynamic quantization: the weights are stored as 8-bit integers, and the activations are quantized while the model runs). To use it, point `modelDir` at that folder instead of `onnx`; no code changes. The trade-offs, measured on an i9-13900K with `IntraOpNumThreads = 8`:
+
+| | `onnx` (float32) | `onnxq` (int8) |
+|---|---|---|
+| Model files | 1.06 GB (Aihub), 1.22 GB (FF14) | 0.27 GB (Aihub), 0.31 GB (FF14) |
+| Time per generated token | 25.1-31.2 ms (Aihub), 21.6-26.1 ms (FF14) | 15.3-17.5 ms (Aihub), 14.0-14.6 ms (FF14) |
+| Peak process memory | 2.8-3.7 GB (Aihub), 2.6-2.7 GB (FF14) | 1.04-1.06 GB (Aihub), 0.78-0.80 GB (FF14) |
+
+The int8 translations differ in places. In a test of 12 sentences per model, 16 of the 24 translations were the same as the float32 model's. Most of the other 8 used a different word or punctuation mark, but one changed the meaning: in FF14's translation of 「駅前のパン屋で朝ごはんを買ってから」, "buy breakfast" became "eat breakfast". Check the int8 model on your own sentences before switching to it.
+
 # How to build
 
 1. Prepare following stuff:

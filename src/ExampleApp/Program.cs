@@ -51,6 +51,7 @@ TestTokenizer(tokenizer);
 
 // Prepare the translator
 string modelDir = @"G:\MODEL\ffxiv-ja-ko\onnx";
-var translator = new FF14JaKoTranslator(tokenizer, modelDir);
+// `using` releases the model's ONNX Runtime sessions (over 1 GB of native memory) when the program ends
+using var translator = new FF14JaKoTranslator(tokenizer, modelDir);
 
 TestTranslator(translator);

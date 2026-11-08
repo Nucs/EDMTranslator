@@ -93,7 +93,8 @@ TestTokenizer(tokenizer);
 
 // Prepare the translator
 string modelDir = @"D:\MODEL\jesc-ja-en-translator\onnx"; // The folder should contains encoder_model.onnx and decoder_model_merged.onnx
-var translator = new JESCJaEnTranslator(tokenizer, modelDir);
+// `using` releases the model's ONNX Runtime sessions (over 1 GB of native memory) when the translator is no longer needed
+using var translator = new JESCJaEnTranslator(tokenizer, modelDir);
 void TestTranslator(JESCJaEnTranslator translator)
 {
     Console.WriteLine("--Translator test--");

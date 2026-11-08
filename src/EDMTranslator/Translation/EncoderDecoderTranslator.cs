@@ -22,8 +22,11 @@ namespace EDMTranslator.Models
     /// <see cref="GreedySearch(List{NamedOnnxValue}, InferenceSession, long, long, int)"/> now runs the NumSharp search, and
     /// <see cref="ForwardOnnx(InferenceSession, List{NamedOnnxValue})"/>, <see cref="CombineTuples"/>,
     /// <see cref="Softmax"/>, <see cref="ArgMax"/> and <see cref="InitKeyValues"/> stay callable.</para>
+    /// <para>A translator holds its two ONNX Runtime sessions - over a gigabyte of native memory that the garbage collector
+    /// does not see, so no collection hurries to free it - until <see cref="Dispose()"/> releases them. Dispose a
+    /// translator you are done with (switching models, say) instead of waiting for the finalizer.</para>
     /// </remarks>
-    public abstract class EncoderDecoderTranslator : Translator
+    public abstract class EncoderDecoderTranslator : Translator, IDisposable
     {
         /// <summary>
         /// Each decoder session's input/output layout, read once from its metadata on the first search and kept for the
@@ -44,6 +47,32 @@ namespace EDMTranslator.Models
             tokenizer)
         {
 
+        }
+
+        /// <summary>
+        /// Releases the translator's ONNX Runtime sessions and their native memory. Calling it again does nothing.
+        /// </summary>
+        /// <remarks>
+        /// The shipped translators open their sessions as <see cref="NDInferenceSession"/>s: <c>Dispose</c> does not block,
+        /// the native release happens once the model run in flight on another thread (if any) has returned, and every run
+        /// after that throws <see cref="ObjectDisposedException"/>. So a <see cref="Translator.Translate"/> racing this call
+        /// fails with <see cref="ObjectDisposedException"/> at its next encoder or decoder step instead of reaching a released
+        /// native session (ONNX Runtime's own <c>Run</c> on a released session ends the process).
+        /// </remarks>
+        public void Dispose()
+        {
+            Dispose(true);
+            GC.SuppressFinalize(this);
+        }
+
+        /// <summary>
+        /// Releases what the translator owns. A subclass that opens sessions overrides it to dispose them when
+        /// <paramref name="disposing"/> is <c>true</c>, then calls the base.
+        /// </summary>
+        /// <param name="disposing"><c>true</c> when called from <see cref="Dispose()"/>; <c>false</c> from a finalizer a
+        /// subclass may add, which must not touch other managed objects (the sessions have finalizers of their own).</param>
+        protected virtual void Dispose(bool disposing)
+        {
         }
 
         /// <summary>

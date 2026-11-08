@@ -66,5 +66,18 @@ namespace EDMTranslator.Translation
             var generatedText = GreedySearch(encoderHiddenStates, decoderSession, 50256, 50256, 1024);
             return generatedText;
         }
+
+        /// <summary>Releases the encoder and decoder sessions (see <see cref="EncoderDecoderTranslator.Dispose()"/>).</summary>
+        /// <param name="disposing"><c>true</c> from <see cref="EncoderDecoderTranslator.Dispose()"/>.</param>
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing)
+            {
+                // NDInferenceSession.Dispose is idempotent and defers the native release to a run in flight on another thread.
+                encoderSession.Dispose();
+                decoderSession.Dispose();
+            }
+            base.Dispose(disposing);
+        }
     }
 }

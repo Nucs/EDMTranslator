@@ -135,7 +135,7 @@ The [FF14](https://huggingface.co/sappho192/ffxiv-ja-ko-translator/tree/main/onn
 | Time per generated token | 25.1-31.2 ms (Aihub), 21.6-26.1 ms (FF14) | 15.3-17.5 ms (Aihub), 14.0-14.6 ms (FF14) |
 | Peak process memory | 2.8-3.7 GB (Aihub), 2.6-2.7 GB (FF14) | 1.04-1.06 GB (Aihub), 0.78-0.80 GB (FF14) |
 
-The int8 translations differ in places. In a test of 12 sentences per model, 16 of the 24 translations were the same as the float32 model's. Most of the other 8 used a different word or punctuation mark, but one changed the meaning: in FF14's translation of 「駅前のパン屋で朝ごはんを買ってから」, "buy breakfast" became "eat breakfast". Check the int8 model on your own sentences before switching to it.
+EDMTranslator runs the int8 models exactly as ONNX Runtime does: on the 24 test sentences (12 per model) its output is token-for-token the one the same int8 model gives when decoded greedily by ONNX Runtime 1.22.1 in Python, at any thread count. The int8 models' own translations differ from the float32 models' in places: 16 of the 24 are the same; most of the other 8 use a different word or punctuation mark, but one changes the meaning (FF14 translates 「駅前のパン屋で朝ごはんを買ってから」 as "eat breakfast" instead of "buy breakfast"). They can also change with the ONNX Runtime version (1.29 gives a different translation for 5 of the 24). Check the int8 model on your own sentences before switching to it.
 
 # How to build
 
